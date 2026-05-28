@@ -1,7 +1,7 @@
 TF      := terraform -chdir=terraform
 REGION  := $(shell $(TF) output -raw 2>/dev/null | true)
 
-.PHONY: help init plan up ssm logs status outputs down fmt validate osh-deploy osh-vm
+.PHONY: help init plan up ssm logs status outputs down fmt validate osh-deploy osh-vm pause resume
 
 help:
 	@echo "Targets:"
@@ -13,6 +13,8 @@ help:
 	@echo "  make ready      - quick check: did user_data finish? (K8S_READY / K8S_STILL_BOOTSTRAPPING)"
 	@echo "  make status     - kubectl get nodes/pods on the node"
 	@echo "  make outputs    - show terraform outputs"
+	@echo "  make pause      - stop the EC2 node (keeps EBS, ~\$$8/mo; resume in ~1min)"
+	@echo "  make resume     - start the stopped node back up"
 	@echo "  make down       - terraform destroy -auto-approve"
 	@echo "  make fmt        - terraform fmt"
 	@echo "  make validate   - terraform validate"
@@ -64,6 +66,22 @@ ready:
 	aws ssm start-session --target $$INSTANCE_ID --region $$REGION \
 	  --document-name AWS-StartInteractiveCommand \
 	  --parameters command="if [ -f /var/log/user-data-complete ]; then echo K8S_READY; else echo K8S_STILL_BOOTSTRAPPING; tail -n 20 /var/log/user-data.log; fi"
+
+pause:
+	@INSTANCE_ID=$$($(TF) output -raw instance_id) ; \
+	REGION=$$($(TF) output -raw region 2>/dev/null || echo ap-northeast-2) ; \
+	echo "Stopping $$INSTANCE_ID..." ; \
+	aws ec2 stop-instances --instance-ids $$INSTANCE_ID --region $$REGION >/dev/null ; \
+	aws ec2 wait instance-stopped --instance-ids $$INSTANCE_ID --region $$REGION ; \
+	echo "Stopped. EBS only (~\$$8/mo). Resume with: make resume"
+
+resume:
+	@INSTANCE_ID=$$($(TF) output -raw instance_id) ; \
+	REGION=$$($(TF) output -raw region 2>/dev/null || echo ap-northeast-2) ; \
+	echo "Starting $$INSTANCE_ID..." ; \
+	aws ec2 start-instances --instance-ids $$INSTANCE_ID --region $$REGION >/dev/null ; \
+	aws ec2 wait instance-running --instance-ids $$INSTANCE_ID --region $$REGION ; \
+	echo "Running. K8s/OSH usually back in ~30-60s. Check: make status"
 
 down:
 	$(TF) destroy -auto-approve
