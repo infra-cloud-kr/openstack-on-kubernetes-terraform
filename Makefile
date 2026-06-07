@@ -20,7 +20,7 @@ help:
 	@echo "  make validate   - terraform validate"
 	@echo
 	@echo "OpenStack-Helm targets (run after 'make up' + node Ready):"
-	@echo "  make osh-deploy - install OSH 2024.2.0 compute-core stack (~30 min)"
+	@echo "  make osh-deploy - install OSH 2026.1.0 compute-core stack (~30 min)"
 	@echo "  make osh-vm     - validate by booting a CirrOS VM (~3 min)"
 
 init:

@@ -14,21 +14,24 @@
 **결과**: 약 시간당 $0.97 (EBS 포함). 비용 자세히는 [6장](6-cost.md).
 **바꾸려면**: `terraform/variables.tf:9` 또는 `-var="instance_type=..."`.
 
-## 7.3 OSH는 release tag `2024.2.0`에 고정
+## 7.3 OSH는 release tag `2026.1.0`에 고정
 
 **왜**:
 - 옛 자료의 `stable/2024.1` 브랜치는 이미 삭제됨. 현재는 master/edge 두 갈래 + release tag만 남음
-- OSH 2025.2 이상은 `ubuntu_noble` (24.04)만 CI에서 테스트. Ubuntu 22.04 (Jammy) 노드와 호환 안 됨
-- Ubuntu 22.04 (Jammy) + K8s 1.29 조합에 맞는 가장 최근 안정 태그가 2024.2.0
+- OSH 2025.2 이상은 `ubuntu_noble` (24.04)만 CI에서 테스트 → 노드를 Ubuntu 24.04 (Noble) AMI로 맞춤 (`terraform/ec2.tf`의 `ubuntu-noble-24.04`)
+- 2026.1에서 openstack-helm-infra 레포가 openstack-helm 단일 레포로 흡수됨 (helm-toolkit/mariadb/rabbitmq/memcached/openvswitch/libvirt 모두 한 레포) → `osh/deploy.sh`가 단일 clone으로 단순화
+- Noble + K8s 1.34 조합에 맞는 release tag가 2026.1.0 (`FEATURES="2026.1 ubuntu_noble"`)
 
-**바꾸려면**: `osh/deploy.sh:13` `OSH_REF`, 그리고 노드 OS도 함께 Noble로.
+**바꾸려면**: `osh/deploy.sh`의 `OSH_REF`/`FEATURES`, 그리고 `terraform/ec2.tf`의 AMI 필터를 함께 맞춤.
 
-## 7.4 Ingress / MetalLB / Ceph 모두 생략
+## 7.4 Ingress / MetalLB는 생략, 스토리지는 local-path + Rook-Ceph + Cinder LVM
 
 **왜**: 학습용 단일 노드라 외부 노출이 필요 없고, 클러스터 안에서 `osc` 파드로 모든 검증이 됨.
 - **Ingress 안 깔음**: OSH가 만드는 public Service들(keystone, nova, neutron 등)은 ClusterIP라 클러스터 밖에서 직접 못 부름. 안에서 `kubectl exec osc -- openstack ...`로 호출.
 - **MetalLB 안 깔음**: LoadBalancer 타입 Service를 EXTERNAL-IP에 묶을 일이 없음.
-- **Ceph 안 깔음**: glance 이미지 저장소는 PVC + `local-path-provisioner`로 충분. cinder/manila처럼 분산 스토리지가 필요한 컴포넌트는 안 깔았어요.
+- **OpenStack 코어 스토리지는 local-path**: glance 이미지 저장소 등 OSH PVC는 `local-path-provisioner`(default SC + `general` alias)로 충분.
+- **Rook-Ceph는 깔음** (`osh/deploy.sh` Step 16): 80G raw EBS(`/dev/sdg`, terraform `aws_ebs_volume.rook`) 위에 mon/osd/replication=1 단일 노드 CephCluster + RBD StorageClass(`rook-ceph-block`). 단 OpenStack 차트 백엔드(glance/cinder/nova)를 RBD에 직접 묶지는 않음 — K8s 쪽에서 실험용으로 쓰는 실제 Ceph만 제공.
+- **Cinder는 LVM 백엔드** (`osh/deploy.sh` Step 17): 50G raw EBS(`/dev/sdf`)로 만든 VG `cinder-volumes` 위 LVMVolumeDriver. OSH cinder 차트의 기본 ceph 백엔드는 override로 끔.
 **부작용**: 함정 #2(StorageClass alias)와 #3(metadata Service patch)이 생김 — [5.4](5-troubleshooting.md#54-함정-5가지-원인과-해결) 참조.
 
 ## 7.5 K8s API server / kubelet 외부 노출 없음

@@ -5,21 +5,32 @@ variable "region" {
 }
 
 variable "instance_type" {
-  # OSH 2024.2 CI's 'openstack-helm-1node-32GB-ubuntu_jammy' nodeset (8 vCPU / 32 GB)
-  # is the documented minimum for single-node compute-core. Match it with m5.2xlarge
-  # (~$0.48/hr in ap-northeast-2) if you want the cheapest option that still works.
-  # m5.4xlarge doubles both axes — extra headroom for QEMU emulation (no nested KVM
-  # on m5) when booting multiple guests, and survives running optional charts
-  # (heat / cinder / horizon) on top of compute-core without OOM.
-  description = "EC2 instance type. m5.2xlarge = OSH 32GB nodeset baseline; m5.4xlarge = comfortable."
+  # m5zn.metal: 48 vCPU / 192 GB / ~$3.97/hr in ap-northeast-2. Nested KVM
+  # supported. Chosen over m5.metal (96 vCPU) because the default account
+  # vCPU limit for "All Standard" Spot+On-Demand is 64 — m5.metal hits
+  # VcpuLimitExceeded without a quota increase. m5zn.metal also has the
+  # fastest single-core (4.5 GHz) of the metal family.
+  description = "EC2 instance type. m5zn.metal = nested KVM + Ceph within default 64-vCPU quota."
   type        = string
-  default     = "m5.4xlarge"
+  default     = "m5zn.metal"
 }
 
 variable "root_volume_gb" {
   description = "Root EBS volume size. 100GB leaves room for container images + libvirt images."
   type        = number
   default     = 100
+}
+
+variable "cinder_volume_gb" {
+  description = "Extra EBS attached as raw block device for Cinder LVM VG 'cinder-volumes'."
+  type        = number
+  default     = 50
+}
+
+variable "rook_volume_gb" {
+  description = "Extra EBS attached as raw block device for Rook-Ceph OSD (no filesystem)."
+  type        = number
+  default     = 80
 }
 
 variable "project_name" {

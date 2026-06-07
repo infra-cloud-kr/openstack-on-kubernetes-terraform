@@ -51,15 +51,15 @@ terraform -chdir=terraform apply -auto-approve -var="instance_type=m5.2xlarge"
 
 ## 6.5 OpenStack-Helm 공식 권장 사양
 
-OSH README.rst의 호환성 매트릭스 (2024.2 기준):
+OSH README.rst의 호환성 매트릭스 (2026.1 기준):
 
 | OpenStack release | Host OS | Image OS | Kubernetes |
 |---|---|---|---|
-| 2023.2 (Bobcat) | Ubuntu Jammy | Ubuntu Jammy | >=1.29, <=1.31 |
-| 2024.1 (Caracal) | Ubuntu Jammy | Ubuntu Jammy | >=1.29, <=1.31 |
-| **2024.2 (Dalmatian)** ← 이 랩 | **Ubuntu Jammy** | **Ubuntu Jammy** | **>=1.29, <=1.31** |
+| 2024.2 (Dalmatian) | Ubuntu Jammy | Ubuntu Jammy | >=1.29, <=1.31 |
+| 2025.1 (Epoxy) | Ubuntu Noble | Ubuntu Noble | >=1.30, <=1.32 |
+| **2026.1** ← 이 랩 | **Ubuntu Noble** | **Ubuntu Noble** | **1.34** (이 랩 실측) |
 
-K8s 1.32 이상은 공식 지원 범위 밖. 더 최신 K8s를 쓰려면 OSH도 release tag 2025.x / 2026.1로 같이 올려야 하지만, 그 매트릭스는 OSH README에서 업데이트되지 않았고 CI는 `ubuntu_noble` (24.04) 기반으로 이전됐어요. 우리 랩은 README 권장 정중앙에 있습니다.
+이 랩은 Noble(24.04) AMI + K8s 1.34 + OSH `2026.1.0` 조합입니다. 2025.2부터 CI가 `ubuntu_noble` (24.04) 기반으로 이전됐고, 노드 OS·OSH tag·K8s 버전을 모두 그에 맞췄어요 (`osh/deploy.sh`의 `FEATURES="2026.1 ubuntu_noble"`, `terraform/ec2.tf`의 `ubuntu-noble-24.04` AMI). 위 매트릭스의 2025.1 행 등 정확한 K8s 범위는 OSH README.rst를 직접 확인하세요.
 
 OSH CI의 `zuul.d/nodesets.yaml`에서 추정한 hardware 베이스라인:
 

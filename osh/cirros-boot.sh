@@ -19,7 +19,7 @@ spec:
   restartPolicy: Never
   containers:
   - name: cli
-    image: quay.io/airshipit/openstack-client:2024.2-ubuntu_jammy
+    image: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     command: ["sleep","7200"]
     envFrom:
     - secretRef:

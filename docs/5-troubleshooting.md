@@ -98,7 +98,7 @@ make osh-deploy
 
 ### #5 옛 user_data 주석의 stable 브랜치를 더 이상 안 함
 **원인**: opendev.org/openstack/openstack-helm의 `stable/2024.1` 브랜치 자체가 삭제됨. master/edge 두 갈래 + release tag만 남음.
-**해결**: release tag (`2024.2.0`)로 clone. → `osh/deploy.sh` Step 1.
+**해결**: release tag (`2026.1.0`)로 clone. → `osh/deploy.sh` Step 1.
 
 ### #6 (보너스) baltocdn helm apt 저장소의 키 응답이 비어 옴
 **원인**: 옛 `helm` 설치 가이드들은 `https://baltocdn.com/helm/signing.asc`를 apt-key로 받는데, 이 엔드포인트가 빈 응답을 줘서 `gpg --dearmor`가 "no valid OpenPGP data" 실패.
