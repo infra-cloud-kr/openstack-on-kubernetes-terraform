@@ -1,24 +1,24 @@
-# 5. 트러블슈팅
+# 트러블슈팅
 
-## 5.1 make 단계별 에러 cheatsheet
+## make 단계별 에러 cheatsheet
 
 | 증상 | 원인 / 대처 |
 |---|---|
 | `make up` 도중 `UnauthorizedOperation` | AWS 자격증명/권한 부족. `aws sts get-caller-identity` 확인, 권한 부여 |
-| `make ssm` → `session-manager-plugin not found` | 로컬에 플러그인 미설치. [1.1](1-install.md#11-로컬-도구-macos-apple-silicon-기준) 다시 |
+| `make ssm` → `session-manager-plugin not found` | 로컬에 플러그인 미설치. [설치 안내](../getting-started/install.md) 참조 |
 | `make ssm` → `TargetNotConnected` | 노드가 아직 SSM agent를 띄우는 중 (부팅 후 30초쯤). 다시 시도 |
-| `make osh-deploy`가 중간에 Failed | [5.3](#53-osh-deploy-중간-실패-시-이어하기) 이어하기 참조 |
-| 어떤 pod이 영원히 `Init:0/N` 또는 `0/1 Running` | [5.4](#54-함정-5가지-원인과-해결) 5가지 함정 참조 |
+| `make osh-deploy`가 중간에 Failed | [이어하기](#osh-deploy-중간-실패-시-이어하기) 참조 |
+| 어떤 pod이 영원히 `Init:0/N` 또는 `0/1 Running` | [함정 5가지](#함정-5가지-원인과-해결) 참조 |
 | `openstack server create`가 ERROR | `kubectl -n openstack logs -l application=nova,component=compute --tail=50` 보고, 보통 libvirt/qemu 자원 부족 또는 neutron 포트 생성 실패 |
 | 처음부터 깨끗하게 시작 | `make down` → 잠시 후 `make up`. terraform state는 자동 동기화 |
 
-## 5.2 osh-deploy 진행도 확인 (20-30분 동안 어디까지 왔나)
+## osh-deploy 진행도 확인 (20-30분 동안 어디까지 왔나)
 
-`make osh-deploy`는 SSM run-command로 노드에서 `osh/deploy.sh`를 돌리는데, 로컬 터미널엔 30초마다 status 폴링만 보입니다. 실제 진행 단계는 세 갈래로.
+`make osh-deploy`는 SSM run-command로 노드에서 `osh/deploy.sh`를 돌리는데, 로컬 터미널엔 30초마다 status 폴링만 보인다. 실제 진행 단계는 세 갈래로.
 
 ### (1) SSM run-command의 실시간 stdout (set -x trace)
 
-`deploy.sh`는 `set -x`로 켜져 있어서 지금 어느 `helm install`/`kubectl apply` 단계인지 줄 단위로 찍힙니다. `make osh-deploy` 화면의 command-id를 잡아서:
+`deploy.sh`는 `set -x`로 켜져 있어서 지금 어느 `helm install`/`kubectl apply` 단계인지 줄 단위로 찍힌다. `make osh-deploy` 화면의 command-id를 잡아서:
 
 ```bash
 aws ssm get-command-invocation \
@@ -28,7 +28,7 @@ aws ssm get-command-invocation \
     --query 'StandardOutputContent' --output text | tail -50
 ```
 
-마지막 줄이 어떤 chart를 깔고 있는지 / 어떤 job을 기다리는지 알려줍니다.
+마지막 줄이 어떤 chart를 깔고 있는지 / 어떤 job을 기다리는지 알려준다.
 
 ### (2) 노드 안에서 클러스터 상태 (가장 신뢰할 수 있음)
 
@@ -46,7 +46,7 @@ helm list 줄 수가 늘어나는 속도 = 진행 속도. 보통 순서: rabbitm
 
 ### (3) 가장 오래 걸리는 단계 — `nova-bootstrap`의 `wait_for_computes`
 
-nova chart의 bootstrap job이 hypervisor(=nova-compute가 placement에 등록되는 것)가 잡힐 때까지 폴링. 여기서 5-10분 잡힙니다. 답답하면:
+nova chart의 bootstrap job이 hypervisor(=nova-compute가 placement에 등록되는 것)가 잡힐 때까지 폴링한다. 여기서 5-10분 걸린다. 진행 상황을 보려면:
 
 ```bash
 kubectl -n openstack get jobs | grep bootstrap
@@ -57,14 +57,14 @@ kubectl -n openstack logs job/keystone-bootstrap --tail=30
 
 `nova-compute` 파드가 placement에 등록되면 (`openstack hypervisor list`에 나타나면) bootstrap job이 Succeeded로 빠지고 다음 helm install로 진행.
 
-## 5.3 osh-deploy 중간 실패 시 이어하기
+## osh-deploy 중간 실패 시 이어하기
 
-`osh/deploy.sh`는 idempotent하게 짜여 있어요:
+`osh/deploy.sh`는 idempotent하게 짜여 있다:
 - `helm upgrade --install` 사용 — 이미 깔린 release는 그대로
 - 노드 라벨, StorageClass, namespace 등 모두 "이미 있으면 skip"
 - patch 명령들도 멱등
 
-그래서 그냥 다시 `make osh-deploy`를 호출하면 됩니다. 단, **glance helm release가 `failed` 상태로 박힌 경우**가 가끔 있는데 (post-install hook이 시간 끌리면) 이건 cosmetic이라 무시해도 PVC, pods는 정상.
+그래서 `make osh-deploy` 를 다시 호출하면 된다. 단, **glance helm release가 `failed` 상태로 남는 경우**가 가끔 있는데(post-install hook 이 지연되면) 이건 cosmetic 이라 무시해도 PVC·pods 는 정상이다.
 
 진짜 깨졌다 싶으면:
 ```bash
@@ -76,9 +76,9 @@ exit   # 로컬로 나와서
 make osh-deploy
 ```
 
-## 5.4 함정 5가지 (원인과 해결)
+## 함정 5가지 (원인과 해결)
 
-이 랩을 만들면서 실제로 부딪힌 것들. 모두 `osh/deploy.sh`와 `terraform/user_data.sh`에 영구 해결 코드가 들어있어요.
+이 랩을 만들면서 실제로 부딪힌 것들. 모두 `osh/deploy.sh`와 `terraform/user_data.sh`에 영구 해결 코드가 들어있다.
 
 ### #1 `helm osh` 플러그인이 다음 SSM 호출에서 사라짐
 **원인**: SSM run-command 셸이 `HOME=''`로 시작. helm은 `$HOME/.local/share/helm/plugins`를 보는데 비어있으면 cwd 기준으로 보게 됨 → 매번 다른 디렉토리.
@@ -103,7 +103,3 @@ make osh-deploy
 ### #6 (보너스) baltocdn helm apt 저장소의 키 응답이 비어 옴
 **원인**: 옛 `helm` 설치 가이드들은 `https://baltocdn.com/helm/signing.asc`를 apt-key로 받는데, 이 엔드포인트가 빈 응답을 줘서 `gpg --dearmor`가 "no valid OpenPGP data" 실패.
 **해결**: 공식 `https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3` 스크립트로 설치. → `terraform/user_data.sh` 6b 단계.
-
----
-
-다음 → [6. 운영 — 비용과 사이즈](6-cost.md)

@@ -41,3 +41,11 @@ aws-credentials*
 
 # Logs
 *.log
+
+# Sphinx 문서 빌드 산출물
+doc/build/
+
+# Python 가상환경 (문서 로컬 빌드용)
+.venv/
+venv/
+__pycache__/

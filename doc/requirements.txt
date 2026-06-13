@@ -1,0 +1,10 @@
+# 문서 빌드에 필요한 Python 패키지.
+# 본문은 Markdown(MyST)로 작성하므로 myst-parser 가 필요하다.
+sphinx>=7.0.0
+furo>=2024.1.29
+myst-parser>=2.0.0
+sphinxcontrib-mermaid>=0.9.2
+
+# (선택) OpenStack 공식 문서 테마로 전환할 때 주석을 해제하고
+# doc/source/conf.py 의 html_theme 을 함께 변경한다.
+# openstackdocstheme>=3.0.0
