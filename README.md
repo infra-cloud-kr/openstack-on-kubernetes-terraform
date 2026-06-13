@@ -1,55 +1,55 @@
-# openstack-aws — OpenStack-Helm 단일 노드 학습 랩
+# OpenStack on Kubernetes
 
-AWS EC2 한 대 위에 Kubernetes + OpenStack-Helm 2024.2.0 (Keystone / Glance / Nova / Neutron / Placement) 을 띄우고 CirrOS VM 부팅까지 검증하는 학습용 실습 환경.
+**English** | [한국어](README.ko.md)
 
-**한 사이클 ≈ 30분 / 비용 ≈ $1.3 (m5.4xlarge 1시간 가정).**
+A hands-on learning environment that deploys Kubernetes and OpenStack-Helm (Keystone, Nova, Neutron, Glance) on a single AWS EC2 instance, validated end-to-end by successfully booting a CirrOS virtual machine.
 
-## 빠른 시작
+## Quick start
 
 ```bash
-make init           # 처음 한 번
-make up             # EC2 + VPC 생성 (~2분)
-make ready          # K8s 부트스트랩 완료 대기 (~3분)
-make osh-deploy     # OpenStack-Helm 풀스택 (~20분)
-make osh-vm         # CirrOS VM 부팅 검증 (~3분)
-make down           # 끝나면 반드시
+make init           # one-time setup
+make up             # create EC2 + VPC (~2 min)
+make ready          # wait for K8s bootstrap to finish (~3 min)
+make osh-deploy     # full OpenStack-Helm stack (~20 min)
+make osh-vm         # validate by booting a CirrOS VM (~3 min)
+make down           # always run when you're done
 ```
 
-각 명령이 정확히 무엇을 하는지, 막혔을 때 어디를 보는지는 아래 문서들에 있습니다.
+What each command does exactly, and where to look when you get stuck, is covered in the docs below.
 
-## 문서 목차
+## Documentation
 
-1. [설치](docs/1-install.md) — 로컬 도구 / AWS 자격증명 / 한 줄 사이클
-2. [설치 확인](docs/2-verify.md) — 노드 진입, `KUBECONFIG` 설명, 3계층 점검 (K8s → OpenStack → end-to-end VM)
-3. [K8s와 OpenStack 연계 구조](docs/3-architecture.md) — Deployment / DaemonSet / StatefulSet / Job 매핑, Service DNS, Secret 흐름, 가상화 경로
-4. [OpenStack 이용 (놀이터)](docs/4-using-openstack.md) — `openstack` CLI로 VM 띄우고 끄고 네트워크 만들기
-5. [트러블슈팅](docs/5-troubleshooting.md) — 에러 cheatsheet, osh-deploy 진행도 확인, 5가지 함정과 해결
-6. [운영 — 비용과 사이즈](docs/6-cost.md) — AWS 인스턴스 선택지 비교, 한 사이클 비용 시나리오
-7. [디자인 결정 메모](docs/7-design-decisions.md) — 왜 SSH 안 씀 / 왜 m5.4xlarge / 왜 release tag 고정 / 왜 Ingress·Ceph 생략
+1. [Install](docs/en/1-install.md) — local tools / AWS credentials / the one-line cycle
+2. [Verify](docs/en/2-verify.md) — connecting to the node, `KUBECONFIG` explained, the 3-layer check (K8s → OpenStack → end-to-end VM)
+3. [How K8s and OpenStack fit together](docs/en/3-architecture.md) — Deployment / DaemonSet / StatefulSet / Job mapping, Service DNS, Secret flow, the virtualization path
+4. [Using OpenStack (the playground)](docs/en/4-using-openstack.md) — launch and tear down VMs and build networks with the `openstack` CLI
+5. [Troubleshooting](docs/en/5-troubleshooting.md) — error cheatsheet, tracking osh-deploy progress, 5 common pitfalls and fixes
+6. [Instance sizes and cost](docs/en/6-cost.md) — AWS instance options compared with their hourly cost
+7. [Notes & constraints](docs/en/7-design-decisions.md) — SSM-only access, pinned versions, ClusterIP-only services, no local kubectl
 
-## 저장소 구조
+## Repository layout
 
 ```
 .
-├── Makefile                # make up / down / osh-deploy / osh-vm 등 단축 명령
-├── docs/                   # 위 7개 문서
-├── terraform/              # AWS 인프라
-│   ├── providers.tf        #   AWS provider (Seoul 리전)
-│   ├── vpc.tf              #   VPC + 퍼블릭 서브넷 + egress-only SG
-│   ├── iam.tf              #   SSM Session Manager용 IAM 역할 (SSH 안 씀)
-│   ├── ec2.tf              #   m5.4xlarge Ubuntu 22.04, 100GB gp3
-│   ├── user_data.sh        #   부팅 시 K8s 1.29 + Calico + helm 자동 설치
-│   ├── outputs.tf          #   instance_id, region, ssm_command 출력
+├── Makefile                # shortcuts: make up / down / osh-deploy / osh-vm, etc.
+├── docs/                   # the 7 docs above, in en/ and ko/
+├── terraform/              # AWS infrastructure
+│   ├── providers.tf        #   AWS provider (Seoul region)
+│   ├── vpc.tf              #   VPC + public subnet + egress-only SG
+│   ├── iam.tf              #   IAM role for SSM Session Manager (no SSH)
+│   ├── ec2.tf              #   m5.4xlarge, Ubuntu 24.04 (Noble), 100 GB gp3
+│   ├── user_data.sh        #   on boot, auto-installs K8s 1.34 + Calico + helm
+│   ├── outputs.tf          #   instance_id, region, ssm_command
 │   └── variables.tf
-└── osh/                    # OpenStack-Helm 배포 (노드에서 실행)
-    ├── deploy.sh           #   OSH 2024.2.0 컴퓨트 코어 풀스택 설치 (~20분)
-    └── cirros-boot.sh      #   CirrOS VM 부팅으로 검증 (~3분)
+└── osh/                    # OpenStack-Helm deployment (runs on the node)
+    ├── deploy.sh           #   install OSH 2026.1.0 compute-core full stack (~20 min)
+    └── cirros-boot.sh      #   validate by booting a CirrOS VM (~3 min)
 ```
 
-## 처음이라면
+## Where to start
 
-`make help`로 사용 가능한 타겟 확인 → [1. 설치](docs/1-install.md)부터 차례로.
+Run `make help` to see the available targets, then work through the docs starting from [1. Install](docs/en/1-install.md).
 
-이미 한 번 띄워본 적 있다면 → [2. 설치 확인](docs/2-verify.md) (점검 명령어 모음) 또는 [4. OpenStack 이용](docs/4-using-openstack.md) (놀이터)로 바로.
+Already brought it up once? Jump straight to [2. Verify](docs/en/2-verify.md) (the check commands) or [4. Using OpenStack](docs/en/4-using-openstack.md) (the playground).
 
-막혔다면 → [5. 트러블슈팅](docs/5-troubleshooting.md).
+Stuck? See [5. Troubleshooting](docs/en/5-troubleshooting.md).

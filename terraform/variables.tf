@@ -5,7 +5,7 @@ variable "region" {
 }
 
 variable "instance_type" {
-  # OSH 2024.2 CI's 'openstack-helm-1node-32GB-ubuntu_jammy' nodeset (8 vCPU / 32 GB)
+  # OSH 2026.1 CI's 'openstack-helm-1node-32GB-ubuntu_noble' nodeset (8 vCPU / 32 GB)
   # is the documented minimum for single-node compute-core. Match it with m5.2xlarge
   # (~$0.48/hr in ap-northeast-2) if you want the cheapest option that still works.
   # m5.4xlarge doubles both axes — extra headroom for QEMU emulation (no nested KVM

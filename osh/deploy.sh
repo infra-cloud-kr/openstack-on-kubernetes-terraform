@@ -1,28 +1,37 @@
 #!/bin/bash
-# Deploy compute-core OpenStack-Helm 2024.2.0 on a single-node K8s cluster.
+# Deploy compute-core OpenStack-Helm 2026.1.0 on a single-node K8s cluster.
 # Designed to be idempotent. Run as root on the node.
 #
-# Prereqs: K8s 1.29 + Calico + Helm (user_data already provides these).
+# Prereqs: K8s 1.34 + Calico + Helm (user_data already provides these).
 # Total runtime: ~30 min on m5.4xlarge.
 
 set -xeuo pipefail
 export HOME=/root
 export KUBECONFIG=/etc/kubernetes/admin.conf
-export FEATURES="2024.2 ubuntu_jammy"
+export FEATURES="2026.1 ubuntu_noble"
 
-OSH_REF="2024.2.0"
+OSH_REF="2026.1.0"
 OSH_ROOT=/opt/openstack-helm
 OSH_DIR="$OSH_ROOT/openstack-helm"
-INFRA_DIR="$OSH_ROOT/openstack-helm-infra"
+# As of OSH 2025.2+ the former openstack-helm-infra repo (helm-toolkit, mariadb,
+# rabbitmq, memcached, openvswitch, libvirt, ovn) was absorbed into the single
+# openstack-helm repo, and all values_overrides live in one top-level tree.
+# Keep INFRA_DIR/OVR_INFRA as aliases of the single repo so the steps below read
+# the same as before.
+INFRA_DIR="$OSH_DIR"
 OVR_OSH="$OSH_DIR/values_overrides"
-OVR_INFRA="$INFRA_DIR/values_overrides"
+OVR_INFRA="$OVR_OSH"
 
-# ----- Step 1: clone OSH at the matching release tag -----
+# ----- Step 1: clone OSH at the matching release tag (single repo now) -----
 mkdir -p "$OSH_ROOT"
 cd "$OSH_ROOT"
 [ -d openstack-helm ] || git clone --depth 1 -b "$OSH_REF" https://opendev.org/openstack/openstack-helm.git
-[ -d openstack-helm-infra ] || git clone --depth 1 -b "$OSH_REF" https://opendev.org/openstack/openstack-helm-infra.git
 chown -R ubuntu:ubuntu "$OSH_ROOT"
+# The 2026.1 chart build computes each chart's version from git (tools/chart_version.sh),
+# but we run as root while the repo is owned by ubuntu. Without this, git aborts with
+# "detected dubious ownership", chart_version.sh emits nothing, and `helm package
+# --version` fails. Mark the repo safe for root's global git config.
+git config --global --add safe.directory "$OSH_DIR"
 
 # ----- Step 2: install OSH helm plugin under /root -----
 # SSM run-command sessions have HOME='', so helm reads plugins from CWD/.local
@@ -34,10 +43,12 @@ fi
 helm plugin list
 
 # ----- Step 3: build chart dependencies (helm-toolkit etc.) -----
-# All OSH charts depend on helm-toolkit. prepare-charts.sh runs `make all`
-# in both openstack-helm-infra and openstack-helm, producing .tgz packages.
+# All OSH charts depend on helm-toolkit (resolved via file://../helm-toolkit).
+# prepare-charts.sh runs `make all`, which `helm dep up`s every chart and
+# packages .tgz files into the repo root. The packaged version is
+# 2026.1.<n>+<sha>, so match by glob rather than an exact filename.
 cd "$OSH_DIR"
-[ -f "$INFRA_DIR/helm-toolkit-${OSH_REF}.tgz" ] || bash tools/deployment/common/prepare-charts.sh
+compgen -G "$OSH_DIR/helm-toolkit-"*.tgz >/dev/null || bash tools/deployment/common/prepare-charts.sh
 
 # ----- Step 4: storage provisioner + StorageClasses -----
 # OSH 2024.2 hardcodes some PVC class_names to 'general' (e.g. glance).
@@ -68,6 +79,37 @@ for L in openstack-control-plane openstack-compute-node \
   kubectl label nodes "$NODE" "${L}=enabled" --overwrite
 done
 
+# ----- Step 5b: endpointslices RBAC for kubernetes-entrypoint -----
+# OSH 2026.1's kubernetes-entrypoint image resolves Service dependencies via the
+# EndpointSlices API (discovery.k8s.io), but the per-chart RBAC only grants the
+# legacy core 'endpoints' resource. On K8s 1.34 every init container then fails
+# with "endpointslices.discovery.k8s.io is forbidden", wedging post-install hooks
+# (rabbitmq-cluster-wait) and every service-dependent pod. Grant all openstack
+# service accounts read access to endpointslices.
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: osh-endpointslices-reader
+rules:
+- apiGroups: ["discovery.k8s.io"]
+  resources: ["endpointslices"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: osh-endpointslices-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: osh-endpointslices-reader
+subjects:
+- kind: Group
+  name: system:serviceaccounts:openstack
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
 # ----- Step 6: dummy provider1 interface -----
 # neutron's auto_bridge_add wires provider1 into br-ex. On a fake single-node
 # lab there's no real external NIC, so a dummy keeps ovs-agent happy.
@@ -78,7 +120,17 @@ fi
 
 # ----- Step 7: infrastructure (mariadb, rabbitmq, memcached) -----
 cd "$OSH_DIR"
-./tools/deployment/component/common/mariadb.sh
+# mariadb moved to tools/deployment/db/ in 2026.1; rabbitmq/memcached unchanged.
+# These helpers use OSH_HELM_REPO=../openstack-helm, which resolves to $OSH_DIR
+# because CWD is $OSH_DIR.
+#
+# The 2026.1 mariadb.sh enables a prometheus mysql-exporter by default
+# (MONITORING_HELM_ARGS). On this single-node compute-core lab that exporter's
+# create-sql-user job gets stuck (Access denied for 'exporter'), which wedges
+# `helm osh wait-for-pods`. We don't run Prometheus here, so turn monitoring off
+# for the infra charts.
+export MONITORING_HELM_ARGS="--set monitoring.prometheus.enabled=false"
+./tools/deployment/db/mariadb.sh
 ./tools/deployment/component/common/rabbitmq.sh
 ./tools/deployment/component/common/memcached.sh
 

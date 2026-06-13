@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bootstraps a single-node Kubernetes cluster (kubeadm v1.29) with Calico CNI.
+# Bootstraps a single-node Kubernetes cluster (kubeadm v1.34) with Calico CNI.
 # Goal of this stage: a healthy single-node K8s. OpenStack-Helm is a later step.
 set -euxo pipefail
 exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
@@ -39,14 +39,12 @@ sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.to
 systemctl restart containerd
 systemctl enable containerd
 
-# ---------- 3. kubeadm/kubelet/kubectl (v1.29) ----------
-# OSH 2024.2 (Dalmatian) officially supports K8s >=1.29, <=1.31 on Ubuntu Jammy
-# (see openstack-helm/README.rst compatibility matrix). 1.29 is the lower bound
-# but is what's verified end-to-end with this lab; bumping to 1.30 or 1.31 should
-# work and you may want to also bump the Calico version in step 5 accordingly.
-# 1.32+ is outside OSH 2024.2's tested range — chart manifests still use some
-# APIs (e.g. policy/v1beta1, autoscaling/v2beta) that may have been removed.
-K8S_MINOR="v1.29"
+# ---------- 3. kubeadm/kubelet/kubectl (v1.34) ----------
+# OSH 2026.1 (Flamingo) supports K8s >=1.33, <=1.35 on Ubuntu Noble
+# (see openstack-helm/README.rst compatibility matrix). 1.34 sits in the middle
+# of that range. If you change this, bump the Calico version in step 5 to a
+# release that supports the matching K8s minor.
+K8S_MINOR="v1.34"
 mkdir -p /etc/apt/keyrings
 curl -fsSL "https://pkgs.k8s.io/core:/stable:/${K8S_MINOR}/deb/Release.key" \
   | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -74,8 +72,22 @@ cp /etc/kubernetes/admin.conf /root/.kube/config
 # NOTE: --server-side is REQUIRED. Plain `kubectl apply` fails on tigera-operator
 # CRDs because they exceed the 262144-byte annotation size limit
 # (last-applied-configuration annotation).
-kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
-kubectl apply --server-side --force-conflicts -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+CALICO_VER="v3.32.0"
+kubectl apply --server-side --force-conflicts -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VER}/manifests/tigera-operator.yaml"
+# As of recent Calico the tigera-operator registers its CRDs (Installation,
+# APIServer, ...) at runtime, so custom-resources.yaml races ahead of the CRDs
+# and fails with "no matches for kind Installation". Wait for the CRD, then
+# retry the apply until it sticks.
+echo "Waiting for tigera-operator CRDs..."
+for i in $(seq 1 60); do
+  kubectl get crd installations.operator.tigera.io >/dev/null 2>&1 && break
+  sleep 5
+done
+for i in $(seq 1 30); do
+  kubectl apply --server-side --force-conflicts -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VER}/manifests/custom-resources.yaml" && break
+  echo "custom-resources apply not ready yet, retrying ($i)..."
+  sleep 5
+done
 
 # ---------- 6. untaint master so workloads schedule on the single node ----------
 kubectl taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
