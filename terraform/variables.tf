@@ -6,14 +6,14 @@ variable "region" {
 
 variable "instance_type" {
   # OSH 2026.1 CI's 'openstack-helm-1node-32GB-ubuntu_noble' nodeset (8 vCPU / 32 GB)
-  # is the documented minimum for single-node compute-core. Match it with m5.2xlarge
-  # (~$0.48/hr in ap-northeast-2) if you want the cheapest option that still works.
-  # m5.4xlarge doubles both axes — extra headroom for QEMU emulation (no nested KVM
-  # on m5) when booting multiple guests, and survives running optional charts
-  # (heat / cinder / horizon) on top of compute-core without OOM.
-  description = "EC2 instance type. m5.2xlarge = OSH 32GB nodeset baseline; m5.4xlarge = comfortable."
+  # is the documented minimum for single-node compute-core. m5.2xlarge matches it
+  # exactly (~$0.48/hr in ap-northeast-2) and is verified to run the full compute-core
+  # stack plus a CirrOS VM boot (full-stack working set is ~8 GB, well under 32 GB).
+  # Bump to m5.4xlarge (16 vCPU / 64 GB) for headroom when booting multiple guests or
+  # adding optional charts (heat / cinder / horizon) on top of compute-core.
+  description = "EC2 instance type. m5.2xlarge = OSH 32GB nodeset baseline (verified); m5.4xlarge = comfortable."
   type        = string
-  default     = "m5.4xlarge"
+  default     = "m5.2xlarge"
 }
 
 variable "root_volume_gb" {
