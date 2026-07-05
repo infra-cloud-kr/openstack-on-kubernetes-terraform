@@ -12,6 +12,25 @@ CirrOS 가상머신 부팅까지 end-to-end 로 검증하는 실습 학습 환�
 - 단일 노드, **Terraform + SSM + Makefile** 로 전 과정 코드화(IaC)
 - SSH 없이 **SSM Session Manager** 로만 접근
 
+## 왜 이렇게 만들었나
+
+프로덕션급 OpenStack 을 깔려는 게 아니다. VM 하나를 띄우는 최소 경로 — 컴퓨트 코어 —
+가 Kubernetes 위에서 어떻게 도는지 한 대로 끝까지 눈으로 보려는 학습용 랩이다.
+끝까지 돌리면 OpenStack-Helm 이 각 컴포넌트를 K8s 리소스(Deployment · DaemonSet ·
+StatefulSet)로 어떻게 올리는지, CirrOS VM 부팅이 Keystone → Glance → Nova → Neutron →
+Placement 로 어떻게 흐르는지 이해하게 된다.
+
+설계 선택마다 이유가 있다:
+
+- **단일 노드** — 컨트롤 플레인과 데이터 플레인을 한 노드에 함께 올려 최소 비용으로
+  end-to-end 흐름만 확인한다. HA·다중 노드 같은 프로덕션 요소는 일부러 뺐다.
+- **SSM 만, SSH 없이** — SSH 키 관리와 보안 그룹 22번 개방 없이 접근한다. 자격증명
+  노출면을 줄이는 의도적 선택이다.
+- **m5.2xlarge (8 vCPU / 32GB)** — OSH 가 컴퓨트 코어 풀스택에 권장하는 최소 사양과
+  정확히 일치한다. 더 작으면 파드가 안 뜨고, 더 크면 과금만 는다.
+- **Terraform + Makefile** — 생성부터 정리까지 전 과정을 코드로 두어 한 줄 명령으로
+  재현하고, 실습이 끝나면 흔적 없이 내린다.
+
 ## 빠른 시작
 
 ```bash
@@ -23,22 +42,10 @@ make osh-vm         # CirrOS VM 부팅으로 검증 (~3분)
 make down           # 끝나면 반드시 실행
 ```
 
-`make help` 로 전체 타겟을 확인한다. 처음이면 [설치](doc/source/getting-started/install.md)부터
-따라가고, 막히면 [트러블슈팅](doc/source/operations/troubleshooting.md)을 본다.
+`make help` 로 전체 타겟을 확인한다.
 
-## 문서
-
-문서는 `doc/source/` 에 Markdown(MyST)으로 작성하고 Sphinx 로 빌드해 GitHub Pages 로
-배포한다. 빌드·작성 방법은 [문서 기여 가이드](doc/source/contributing.md)를 참고한다.
-
-| 문서 | 내용 |
-|---|---|
-| [설치](doc/source/getting-started/install.md) | 로컬 도구 · AWS 자격증명 · 한 줄 사이클 |
-| [설치 확인](doc/source/getting-started/verify.md) | 노드 접속 · `KUBECONFIG` · 3계층 점검 |
-| [아키텍처](doc/source/architecture/overview.md) | K8s 리소스 매핑 · 서비스 디스커버리 · VM 부팅 흐름 (다이어그램) |
-| [OpenStack 이용](doc/source/operations/using-openstack.md) | `openstack` CLI 로 VM·네트워크 다루기 |
-| [트러블슈팅](doc/source/operations/troubleshooting.md) | 에러 치트시트 · 진행 추적 · 함정과 해결 |
-| [비용](doc/source/operations/cost.md) | 한 사이클 비용 · 비용 관리 · 권장 사양 |
+> **비용 경고.** m5.2xlarge 기준 한 사이클(~1시간)이 약 $0.8 다. 인스턴스를 안 내리면
+> 하루 약 $12씩 쌓인다. 실습이 끝나면 반드시 `make down` 으로 내린다 
 
 ## 저장소 구조
 
@@ -48,10 +55,9 @@ make down           # 끝나면 반드시 실행
 ├── terraform/              # AWS 인프라 (VPC · IAM · EC2 · user_data)
 │   ├── ec2.tf              #   m5.2xlarge, Ubuntu 24.04(Noble), 100 GB gp3
 │   └── user_data.sh        #   부팅 시 K8s 1.34 + Calico + helm 자동 설치
-├── osh/                    # OpenStack-Helm 배포 (노드에서 실행)
-│   ├── deploy.sh           #   OSH 2026.1.0 컴퓨트 코어 풀스택 설치 (~20분)
-│   └── cirros-boot.sh      #   CirrOS VM 부팅으로 검증 (~3분)
-└── doc/                    # 문서 (Markdown + Sphinx, tox -e docs 로 빌드)
+└── osh/                    # OpenStack-Helm 배포 (노드에서 실행)
+    ├── deploy.sh           #   OSH 2026.1.0 컴퓨트 코어 풀스택 설치 (~20분)
+    └── cirros-boot.sh      #   CirrOS VM 부팅으로 검증 (~3분)
 ```
 
 ## 라이선스

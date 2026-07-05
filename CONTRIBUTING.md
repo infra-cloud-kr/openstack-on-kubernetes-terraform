@@ -1,7 +1,6 @@
 # 기여 가이드
 
 이 프로젝트(단일 노드 OpenStack-on-Kubernetes 랩)에 기여하는 방법을 정리한다.
-문서(Sphinx) 작성·빌드 규칙은 별도로 [문서 기여 가이드](doc/source/contributing.md)를 참고한다.
 
 ## 저장소 구성
 
@@ -10,13 +9,11 @@
 - `osh/` — 노드에서 실행되는 OpenStack-Helm 배포(`deploy.sh`)와 CirrOS 부팅
   검증(`cirros-boot.sh`).
 - `Makefile` — `make up / ready / status / osh-deploy / osh-vm / down` 등 단축 명령.
-- `doc/` — Sphinx 문서.
 
 ## 개발 환경
 
-로컬 도구는 [설치 문서](doc/source/getting-started/install.md)에 정리되어 있다
-(`awscli`, `terraform`, `session-manager-plugin`, `jq`, `make`). AWS 자격증명과
-ap-northeast-2 리전 접근 권한이 필요하다.
+로컬 도구는 `awscli`, `terraform`, `session-manager-plugin`, `jq`, `make` 가 필요하다.
+AWS 자격증명과 ap-northeast-2 리전 접근 권한도 있어야 한다.
 
 ## 변경을 검증하는 법
 
@@ -31,7 +28,7 @@ make down           # 반드시 정리
 ```
 
 > ⚠️ 검증이 끝나면 **반드시 `make down`** 으로 리소스를 내린다. 인스턴스를 켜둔 채로
-> 두면 시간당 과금이 누적된다(비용은 [비용 문서](doc/source/operations/cost.md) 참고).
+> 두면 시간당 과금이 누적된다.
 
 ## 코드 규칙
 
@@ -48,4 +45,3 @@ make down           # 반드시 정리
 
 - 한 PR 은 하나의 논리적 변경에 집중한다.
 - 인프라/OSH 변경은 위 사이클로 검증한 결과를 PR 설명에 적는다.
-- 문서를 함께 수정했다면 `tox -e docs` 가 통과하는지 확인한다.
