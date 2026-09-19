@@ -52,5 +52,33 @@ resource "aws_security_group" "node" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # QEMU/libvirt live-migration data channel (block migration transfers the qcow2
+  # disk over this range). `self = true` allows any two instances in this SG to
+  # reach each other on these ports, so node-a and node-b are covered by one rule.
+  # NOTE: libvirtd's own control channel (16509 tcp, 16514 tls) may also need to be
+  # opened here once L2/L3 actually attempt a migration and hit a connection issue —
+  # not added preemptively since it's unconfirmed whether OSH's libvirt pod needs it
+  # exposed beyond the pod network.
+  ingress {
+    from_port = 49152
+    to_port   = 49215
+    protocol  = "tcp"
+    self      = true
+  }
+
+  # L2: node-b joining the K8s cluster needs the kube-apiserver port (6443),
+  # and OSH scheduling nova-compute/libvirt/OVS agents onto node-b needs
+  # Calico VXLAN/BGP, OVS tunnel, and libvirtd control-channel traffic between
+  # the two nodes. Rather than enumerate every port, open all traffic between
+  # members of this SG — node-a and node-b are the only members, they're a
+  # trusted experiment pair, and egress is already unrestricted.
+  ingress {
+    description = "all traffic between node-a/node-b (Calico, OVS tunnel, libvirt control+migration)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
   tags = { Name = "${var.project_name}-node-sg" }
 }

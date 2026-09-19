@@ -1,25 +1,29 @@
 TF      := terraform -chdir=terraform
 REGION  := $(shell $(TF) output -raw 2>/dev/null | true)
 
-.PHONY: help init plan up ssm logs status outputs down fmt validate osh-deploy osh-vm pause resume
+.PHONY: help init plan up ssm logs status outputs down fmt validate osh-deploy osh-vm pause resume ssm-compute logs-compute ready-compute status-compute
 
 help:
-	@echo "Targets:"
+	@echo "Targets (node-a: control-plane + data-plane; node-b: compute-only, live-migration-webhook track):"
 	@echo "  make init       - terraform init"
 	@echo "  make plan       - terraform plan"
-	@echo "  make up         - terraform apply -auto-approve (creates the EC2 node)"
-	@echo "  make ssm        - start an SSM Session Manager shell on the node"
-	@echo "  make logs       - tail the cloud-init bootstrap log on the node"
-	@echo "  make ready      - quick check: did user_data finish? (K8S_READY / K8S_STILL_BOOTSTRAPPING)"
-	@echo "  make status     - kubectl get nodes/pods on the node"
+	@echo "  make up         - terraform apply -auto-approve (creates both EC2 nodes)"
+	@echo "  make ssm        - start an SSM Session Manager shell on node-a"
+	@echo "  make logs       - tail the cloud-init bootstrap log on node-a"
+	@echo "  make ready      - quick check: did node-a's user_data finish? (K8S_READY / K8S_STILL_BOOTSTRAPPING)"
+	@echo "  make status     - kubectl get nodes/pods on node-a"
+	@echo "  make ssm-compute    - start an SSM Session Manager shell on node-b"
+	@echo "  make logs-compute   - tail the cloud-init bootstrap log on node-b"
+	@echo "  make ready-compute  - quick check: did node-b's user_data finish?"
+	@echo "  make status-compute - kubectl get nodes/pods, as seen from node-b (not yet cluster-joined until L2)"
 	@echo "  make outputs    - show terraform outputs"
 	@echo "  make pause      - stop the EC2 node (keeps EBS, ~\$$8/mo; resume in ~1min)"
 	@echo "  make resume     - start the stopped node back up"
-	@echo "  make down       - terraform destroy -auto-approve"
+	@echo "  make down       - terraform destroy -auto-approve (destroys both nodes)"
 	@echo "  make fmt        - terraform fmt"
 	@echo "  make validate   - terraform validate"
 	@echo
-	@echo "OpenStack-Helm targets (run after 'make up' + node Ready):"
+	@echo "OpenStack-Helm targets (node-a only, run after 'make up' + node-a Ready):"
 	@echo "  make osh-deploy - install OSH 2026.1.0 compute-core stack (~30 min)"
 	@echo "  make osh-vm     - validate by booting a CirrOS VM (~3 min)"
 
@@ -65,7 +69,35 @@ ready:
 	echo "Checking /var/log/user-data-complete on the node..." ; \
 	aws ssm start-session --target $$INSTANCE_ID --region $$REGION \
 	  --document-name AWS-StartInteractiveCommand \
-	  --parameters command="if [ -f /var/log/user-data-complete ]; then echo K8S_READY; else echo K8S_STILL_BOOTSTRAPPING; tail -n 20 /var/log/user-data.log; fi"
+	  --parameters 'command="if [ -f /var/log/user-data-complete ]; then echo K8S_READY; else echo K8S_STILL_BOOTSTRAPPING; tail -n 20 /var/log/user-data.log; fi"'
+
+ssm-compute:
+	@INSTANCE_ID=$$($(TF) output -raw compute_instance_id) ; \
+	REGION=$$($(TF) output -raw region 2>/dev/null || echo ap-northeast-2) ; \
+	echo "Connecting to $$INSTANCE_ID in $$REGION..." ; \
+	aws ssm start-session --target $$INSTANCE_ID --region $$REGION
+
+logs-compute:
+	@INSTANCE_ID=$$($(TF) output -raw compute_instance_id) ; \
+	REGION=$$($(TF) output -raw region 2>/dev/null || echo ap-northeast-2) ; \
+	aws ssm start-session --target $$INSTANCE_ID --region $$REGION \
+	  --document-name AWS-StartInteractiveCommand \
+	  --parameters command="sudo tail -f /var/log/user-data.log"
+
+status-compute:
+	@INSTANCE_ID=$$($(TF) output -raw compute_instance_id) ; \
+	REGION=$$($(TF) output -raw region 2>/dev/null || echo ap-northeast-2) ; \
+	aws ssm start-session --target $$INSTANCE_ID --region $$REGION \
+	  --document-name AWS-StartInteractiveCommand \
+	  --parameters command="sudo -u ubuntu kubectl get nodes -o wide; echo ---; sudo -u ubuntu kubectl get pods -A"
+
+ready-compute:
+	@INSTANCE_ID=$$($(TF) output -raw compute_instance_id) ; \
+	REGION=$$($(TF) output -raw region 2>/dev/null || echo ap-northeast-2) ; \
+	echo "Checking /var/log/user-data-complete on node-b..." ; \
+	aws ssm start-session --target $$INSTANCE_ID --region $$REGION \
+	  --document-name AWS-StartInteractiveCommand \
+	  --parameters 'command="if [ -f /var/log/user-data-complete ]; then echo K8S_READY; else echo K8S_STILL_BOOTSTRAPPING; tail -n 20 /var/log/user-data.log; fi"'
 
 pause:
 	@INSTANCE_ID=$$($(TF) output -raw instance_id) ; \
