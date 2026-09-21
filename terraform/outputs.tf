@@ -22,13 +22,3 @@ output "tail_bootstrap_log" {
   description = "Once connected via SSM, run this to follow the user_data bootstrap log"
   value       = "sudo tail -f /var/log/user-data.log"
 }
-
-output "compute_instance_id" {
-  description = "EC2 instance ID of node-b (compute-only, live-migration-webhook track)"
-  value       = aws_instance.compute.id
-}
-
-output "compute_public_ip" {
-  description = "Public IP of node-b"
-  value       = aws_instance.compute.public_ip
-}
