@@ -1,0 +1,46 @@
+name: Shell checks
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shell-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install ShellCheck
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 https://github.com/koalaman/shellcheck/releases/download/v0.9.0/shellcheck-v0.9.0.linux.x86_64.tar.xz -o shellcheck.tar.xz
+          echo '700324c6dd0ebea0117591c6cc9d7350d9c7c5c287acbad7630fa17b1d4d9e2f  shellcheck.tar.xz' | sha256sum -c -
+          tar -xJf shellcheck.tar.xz
+          echo "$RUNNER_TEMP/shellcheck-v0.9.0" >> "$GITHUB_PATH"
+      - name: Check Bash syntax
+        run: |
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(git ls-files -z '*.sh')
+      - name: Report ShellCheck findings and fail on errors
+        run: |
+          mapfile -d '' scripts < <(git ls-files -z '*.sh')
+          status=0
+          shellcheck --format=gcc "${scripts[@]}" > "$RUNNER_TEMP/shellcheck.txt" || status=$?
+          if (( status > 1 )); then exit "$status"; fi
+          cat "$RUNNER_TEMP/shellcheck.txt"
+          {
+            echo '### ShellCheck'
+            echo 'Warnings and informational findings are reported; errors fail this check.'
+            echo '<pre>'
+            sed -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' "$RUNNER_TEMP/shellcheck.txt"
+            echo '</pre>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          shellcheck --severity=error "${scripts[@]}"
